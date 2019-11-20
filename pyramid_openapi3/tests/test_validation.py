@@ -77,7 +77,7 @@ class TestRequestValidation(TestCase):
         tearDown()
         self.config = None
 
-    def _add_view(self, view_func=None, openapi=True) -> None:
+    def _add_view(self, view_func: t.Callable = None, openapi: bool = True) -> None:
         """Add a simple example view.
 
         :param view_func: an optional view callable.

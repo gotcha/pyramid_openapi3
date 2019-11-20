@@ -11,6 +11,7 @@ from pyramid.config import Configurator
 from pyramid.httpexceptions import exception_response
 from pyramid.httpexceptions import HTTPException
 from pyramid.request import Request
+from pyramid.router import Router
 from pyramid.view import exception_view_config
 from pyramid.view import view_config
 from pyramid_openapi3.exceptions import RequestValidationError
@@ -48,7 +49,7 @@ def get(request: Request) -> t.List[Item]:
 
 
 @view_config(route_name="todo", renderer="json", request_method="POST", openapi=True)
-def post(request: Request) -> t.List[t.Dict[str, str]]:
+def post(request: Request) -> str:
     """Handle POST requests and create TODO items."""
     item = Item(title=request.openapi_validated.body.title)
     ITEMS.append(item)
@@ -80,7 +81,7 @@ def extract_error(err: OpenAPIError, field_name: str = None) -> t.Dict[str, str]
     return output
 
 
-def app():
+def app() -> Router:
     """Prepare a Pyramid app."""
     with Configurator() as config:
         config.include("pyramid_openapi3")

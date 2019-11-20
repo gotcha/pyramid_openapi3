@@ -9,7 +9,7 @@ class RequestValidationError(HTTPBadRequest):
 
     explanation = "Request validation failed."
 
-    def __init__(self, *args, errors, **kwargs) -> None:
+    def __init__(self, *args, errors: t.List[Exception], **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.errors = errors
         self.detail = self.message = "\n".join(str(e) for e in errors)
@@ -18,7 +18,9 @@ class RequestValidationError(HTTPBadRequest):
         """Return str(self.detail) or self.explanation."""
         return str(self.detail) if self.detail else self.explanation
 
-    def _json_formatter(self, status, body, title, environ) -> t.Dict:
+    def _json_formatter(
+        self, status: str, body: str, title: str, environ: t.Dict[str, str]
+    ) -> t.Dict:
         return {"message": body, "code": status, "title": self.title}
 
 

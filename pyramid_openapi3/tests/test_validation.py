@@ -12,10 +12,12 @@ from pyramid.testing import setUp
 from pyramid.testing import tearDown
 from unittest import TestCase
 from zope.interface import Interface
+from pyramid_openapi3.exceptions import ResponseValidationError
 
 import json
 import tempfile
 import typing as t
+import pytest
 
 View = t.Callable[[t.Any, Request], Response]
 
@@ -110,28 +112,6 @@ class TestRequestValidation(TestCase):
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         return request
 
-    def test_request_validation_error(self) -> None:
-        """Test View raises RequestValidationError.
-
-        Request parameters don't match schema.
-        """
-        self._add_view()
-        view = self._get_view()
-        request = self._get_request()
-        from pyramid_openapi3 import RequestValidationError
-
-        with self.assertRaises(RequestValidationError) as cm:
-            view(None, request)
-        response = cm.exception
-        self.assertEqual(str(cm.exception.errors[0]), "Missing required parameter: bar")
-        # not enough of pyramid has been set up so we need to render the
-        # exception response ourselves.
-        response.prepare({"HTTP_ACCEPT": "application/json"})
-        import pdb
-
-        pdb.set_trace()
-        self.assertIn("Missing required parameter: bar", response.json["message"])
-
     def test_view_raises_valid_http_exception(self) -> None:
         """Test View raises HTTPException.
 
@@ -153,7 +133,7 @@ class TestRequestValidation(TestCase):
         response.prepare({"HTTP_ACCEPT": "application/json"})
         self.assertIn("bad foo request", response.json["message"])
 
-    def test_JSONified_request_validation_error(self) -> None:
+    def test_request_validation_error(self) -> None:
         """Request validation errors are rendered as 400 JSON responses."""
         self._add_view()
         self.config.pyramid_openapi3_JSONify_errors()
@@ -181,8 +161,8 @@ class TestRequestValidation(TestCase):
             ],
         )
 
-    def test_JSONified_response_validation_error(self) -> None:
-        """Response validation errors are rendered as 500 JSON responses.
+    def test_response_validation_error(self) -> None:
+        """Test View raises ResponseValidationError.
 
         Example view raises an undefined response code.
         The response validation tween should catch this as response validation error,
@@ -191,7 +171,7 @@ class TestRequestValidation(TestCase):
         from pyramid.httpexceptions import HTTPPreconditionFailed
 
         self._add_view(lambda *arg: HTTPPreconditionFailed())
-        self.config.pyramid_openapi3_JSONify_errors()
+
         # run request through router
         router = Router(self.config.registry)
         environ = {
@@ -203,6 +183,13 @@ class TestRequestValidation(TestCase):
             "HTTP_ACCEPT": "application/json",
             "QUERY_STRING": "bar=1",
         }
+        start_response = DummyStartResponse()
+        with pytest.raises(
+            ResponseValidationError, match="Unknown response http status: 412"
+        ):
+            response = router(environ, start_response)
+
+        self.config.pyramid_openapi3_JSONify_errors()
         start_response = DummyStartResponse()
         response = router(environ, start_response)
         self.assertEqual(start_response.status, "500 Internal Server Error")

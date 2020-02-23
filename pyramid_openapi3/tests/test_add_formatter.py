@@ -12,7 +12,6 @@ def test_add_formatter() -> None:
 
         config.include("pyramid_openapi3")
         config.pyramid_openapi3_add_formatter("foormatter", lambda x: x)
-
         formatter = request.registry.settings["pyramid_openapi3_formatters"].get(
             "foormatter", None
         )

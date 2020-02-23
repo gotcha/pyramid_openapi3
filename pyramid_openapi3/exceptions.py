@@ -14,6 +14,11 @@ class RequestValidationError(HTTPBadRequest):
     def __init__(self, *args, errors, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.errors = errors
+        self.detail = self.message = "\n".join(str(e) for e in errors)
+
+    def __str__(self) -> str:
+        """Return str(self.detail) or self.explanation."""
+        return str(self.detail) if self.detail else self.explanation
 
 
 class ResponseValidationError(HTTPInternalServerError):
@@ -24,6 +29,10 @@ class ResponseValidationError(HTTPInternalServerError):
         super().__init__(*args, **kwargs)
         self.errors = errors
         self.detail = self.message = "\n".join(str(e) for e in errors)
+
+    def __str__(self) -> str:
+        """Return str(self.detail) or self.explanation."""
+        return str(self.detail) if self.detail else self.explanation
 
 
 def extract_error(err: OpenAPIError) -> t.Dict[str, str]:
@@ -41,6 +50,7 @@ def extract_error(err: OpenAPIError) -> t.Dict[str, str]:
         Error:
           type: object
           required:
+            - exception
             - message
           properties:
             field:

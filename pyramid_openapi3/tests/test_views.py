@@ -146,42 +146,6 @@ def test_openapi_view() -> None:
         assert response.json == "bar"
 
 
-def test_openapi_view_validate_HTTPExceptions() -> None:
-    """Test that raised HTTPExceptions are validated against the spec.
-
-    I.e. create a dummy view that raises 403 Forbidden. The openapi integration
-    should re-raise it as InvalidResponse because 403 is not on the list of
-    responses in MINIMAL_DOCUMENT.
-    """
-    with testConfig() as config:
-        config.include("pyramid_openapi3")
-
-        with tempfile.NamedTemporaryFile() as document:
-            document.write(MINIMAL_DOCUMENT)
-            document.seek(0)
-
-            config.pyramid_openapi3_spec(
-                document.name, route="/foo.yaml", route_name="foo_api_spec"
-            )
-
-        config.add_route("foo", "/foo")
-        view_func = lambda *arg: (_ for _ in ()).throw(  # noqa: E731
-            exception_response(403, json_body="Forbidden")
-        )
-        config.add_view(openapi=True, renderer="json", view=view_func, route_name="foo")
-
-        request_interface = config.registry.queryUtility(IRouteRequest, name="foo")
-        view = config.registry.adapters.registered(
-            (IViewClassifier, request_interface, Interface), IView, name=""
-        )
-        request = DummyRequest(config=config, content_type="text/html")
-        request.matched_route = DummyRoute(name="foo", pattern="/foo")
-        context = None
-
-        with pytest.raises(HTTPForbidden):
-            view(context, request)
-
-
 def test_path_parameters() -> None:
     """Test parameters in path are validated correctly."""
     with testConfig() as config:
@@ -223,10 +187,10 @@ def test_path_parameters() -> None:
         request = DummyRequest(config=config, content_type="application/json")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
-        with pytest.raises(RequestValidationError) as exc:
+        with pytest.raises(
+            RequestValidationError, match="Missing required parameter: foo"
+        ):
             response = view(context, request)
-
-        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
         request = DummyRequest(
@@ -281,10 +245,10 @@ def test_header_parameters() -> None:
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
 
-        with pytest.raises(RequestValidationError) as exc:
+        with pytest.raises(
+            RequestValidationError, match="Missing required parameter: foo"
+        ):
             response = view(context, request)
-
-        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
         request = DummyRequest(
@@ -338,10 +302,10 @@ def test_cookie_parameters() -> None:
         request = DummyRequest(config=config, content_type="text/html")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
-        with pytest.raises(RequestValidationError) as exc:
+        with pytest.raises(
+            RequestValidationError, match="Missing required parameter: foo"
+        ):
             response = view(context, request)
-
-        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
         request = DummyRequest(

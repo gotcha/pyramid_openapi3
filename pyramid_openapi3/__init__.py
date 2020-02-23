@@ -109,13 +109,6 @@ def add_explorer_view(
     config.action(("pyramid_openapi3_add_explorer",), register, order=PHASE0_CONFIG)
 
 
-def add_formatter(config: Configurator, name: str, func: t.Callable) -> None:
-    """Add support for configuring formatters."""
-    config.registry.settings.setdefault("pyramid_openapi3_formatters", {})
-    reg = config.registry.settings["pyramid_openapi3_formatters"]
-    reg[name] = func
-
-
 def add_spec_view(
     config: Configurator,
     filepath: str,
@@ -189,12 +182,10 @@ def JSONify_errors(
         extract_error or default_extract_error
     )
 
-    config.add_exception_view(view=openapi_validation_error, context=Exception)
+    config.add_exception_view(
+        view=openapi_validation_error, context=RequestValidationError, renderer="json"
+    )
 
-    # config.add_exception_view(
-    #     view=openapi_validation_error, context=RequestValidationError, renderer="json"
-    # )
-
-    # config.add_exception_view(
-    #     view=openapi_validation_error, context=ResponseValidationError, renderer="json"
-    # )
+    config.add_exception_view(
+        view=openapi_validation_error, context=ResponseValidationError, renderer="json"
+    )

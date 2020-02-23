@@ -1,4 +1,5 @@
-"""Test validaion exceptions."""
+"""Test validation exceptions."""
+
 from dataclasses import dataclass
 from pyramid.interfaces import IRouteRequest
 from pyramid.interfaces import IView
@@ -90,16 +91,6 @@ class TestRequestValidation(TestCase):
             openapi=openapi, renderer="json", view=view_func, route_name="foo"
         )
 
-    def _add_default_exception_view(self) -> None:
-        """Install Pyramid default_exception_response_view."""
-        # setup default exception response view
-        from pyramid.httpexceptions import default_exceptionresponse_view
-        from pyramid.interfaces import IExceptionResponse
-
-        self.config.add_view(
-            view=default_exceptionresponse_view, context=IExceptionResponse
-        )
-
     def _get_view(self) -> View:
         """Return wrapped view method registered in _add_view."""
         request_interface = self.config.registry.queryUtility(IRouteRequest, name="foo")
@@ -113,7 +104,9 @@ class TestRequestValidation(TestCase):
 
         :param params: Query parameter dictionary
         """
-        request = DummyRequest(config=self.config, params=params)
+        request = DummyRequest(
+            config=self.config, params=params, content_type="text/html"
+        )
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         return request
 
@@ -130,10 +123,13 @@ class TestRequestValidation(TestCase):
         with self.assertRaises(RequestValidationError) as cm:
             view(None, request)
         response = cm.exception
-        self.assertEqual(str(cm.exception), "Missing required parameter: bar")
+        self.assertEqual(str(cm.exception.errors[0]), "Missing required parameter: bar")
         # not enough of pyramid has been set up so we need to render the
         # exception response ourselves.
         response.prepare({"HTTP_ACCEPT": "application/json"})
+        import pdb
+
+        pdb.set_trace()
         self.assertIn("Missing required parameter: bar", response.json["message"])
 
     def test_view_raises_valid_http_exception(self) -> None:
@@ -157,13 +153,10 @@ class TestRequestValidation(TestCase):
         response.prepare({"HTTP_ACCEPT": "application/json"})
         self.assertIn("bad foo request", response.json["message"])
 
-    def test_default_exception_view(self) -> None:
-        """Test Pyramid default exception response view.
-
-        Pyramid default exception response view renders a RequestValidationError.
-        """
+    def test_JSONified_request_validation_error(self) -> None:
+        """Request validation errors are rendered as 400 JSON responses."""
         self._add_view()
-        self._add_default_exception_view()
+        self.config.pyramid_openapi3_JSONify_errors()
         # run request through router
         router = Router(self.config.registry)
         environ = {
@@ -177,12 +170,19 @@ class TestRequestValidation(TestCase):
         start_response = DummyStartResponse()
         response = router(environ, start_response)
         self.assertEqual(start_response.status, "400 Bad Request")
-        self.assertIn(
-            "Missing required parameter: bar", json.loads(b"".join(response))["message"]
+        self.assertEqual(
+            json.loads(response[0]),
+            [
+                {
+                    "exception": "MissingRequiredParameter",
+                    "message": "Missing required parameter: bar",
+                    "field": "bar",
+                }
+            ],
         )
 
-    def test_response_validation_error(self) -> None:
-        """Test View raises ResponseValidationError.
+    def test_JSONified_response_validation_error(self) -> None:
+        """Response validation errors are rendered as 500 JSON responses.
 
         Example view raises an undefined response code.
         The response validation tween should catch this as response validation error,
@@ -190,8 +190,8 @@ class TestRequestValidation(TestCase):
         """
         from pyramid.httpexceptions import HTTPPreconditionFailed
 
-        self._add_view(lambda *arg: (_ for _ in ()).throw(HTTPPreconditionFailed()))
-        self._add_default_exception_view()
+        self._add_view(lambda *arg: HTTPPreconditionFailed())
+        self.config.pyramid_openapi3_JSONify_errors()
         # run request through router
         router = Router(self.config.registry)
         environ = {
@@ -206,9 +206,14 @@ class TestRequestValidation(TestCase):
         start_response = DummyStartResponse()
         response = router(environ, start_response)
         self.assertEqual(start_response.status, "500 Internal Server Error")
-        self.assertIn(
-            "Unknown response http status: 412",
-            json.loads(b"".join(response))["message"],
+        self.assertEqual(
+            json.loads(response[0]),
+            [
+                {
+                    "exception": "InvalidResponse",
+                    "message": "Unknown response http status: 412",
+                }
+            ],
         )
 
     def test_nonapi_view(self) -> None:
@@ -227,56 +232,3 @@ class TestRequestValidation(TestCase):
         response = router(environ, start_response)
         self.assertEqual(start_response.status, "200 OK")
         self.assertIn(b"foo", b"".join(response))
-
-    def test_nonapi_view_exception(self) -> None:
-        """Test View without openapi validation raises HTTPException.
-
-        Example view raises a defined response code.
-        """
-        from pyramid.httpexceptions import HTTPBadRequest
-
-        def view_func(*args):
-            raise HTTPBadRequest("bad foo request")
-
-        self._add_view(view_func, openapi=False)
-        self._add_default_exception_view()
-        # run request through router
-        router = Router(self.config.registry)
-        environ = {
-            "wsgi.url_scheme": "http",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "8080",
-            "REQUEST_METHOD": "GET",
-            "PATH_INFO": "/foo",
-        }
-        start_response = DummyStartResponse()
-        response = router(environ, start_response)
-        self.assertEqual(start_response.status, "400 Bad Request")
-        self.assertIn(b"foo", b"".join(response))
-
-    def test_no_default_exception_view(self) -> None:
-        """Test Response Validation Error without default exception view.
-
-        This causes the ResponseValidationError to bubble up to the top, because
-        there is no view to render the HTTPException into a response.
-        """
-        from pyramid.httpexceptions import HTTPPreconditionFailed
-        from pyramid_openapi3.exceptions import ResponseValidationError
-
-        # return the exception, so that response validation can kick in
-        self._add_view(lambda *arg: HTTPPreconditionFailed())
-        # run request through router
-        router = Router(self.config.registry)
-        environ = {
-            "wsgi.url_scheme": "http",
-            "SERVER_NAME": "localhost",
-            "SERVER_PORT": "8080",
-            "REQUEST_METHOD": "GET",
-            "PATH_INFO": "/foo",
-            "QUERY_STRING": "bar=1",
-        }
-        start_response = DummyStartResponse()
-        with self.assertRaises(ResponseValidationError) as cm:
-            router(environ, start_response)
-        self.assertEqual(cm.exception.status_code, 500)
-        self.assertEqual("Unknown response http status: 412", str(cm.exception))

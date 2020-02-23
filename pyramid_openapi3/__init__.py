@@ -1,10 +1,13 @@
 """Configure pyramid_openapi3 addon."""
 
 from .exceptions import RequestValidationError
+from .exceptions import ResponseValidationError
+from .exceptions import extract_error as default_extract_error
 from .wrappers import PyramidOpenAPIRequest
+from pyramid.httpexceptions import exception_response
 from openapi_core import create_spec
-from openapi_core.shortcuts import RequestValidator
-from openapi_core.shortcuts import ResponseValidator
+from openapi_core.validation.request.validators import RequestValidator
+from openapi_core.validation.response.validators import ResponseValidator
 from openapi_spec_validator import validate_spec
 from openapi_spec_validator.schemas import read_yaml_file
 from pyramid.config import Configurator
@@ -27,6 +30,7 @@ def includeme(config: Configurator) -> None:
     config.add_directive("pyramid_openapi3_add_formatter", add_formatter)
     config.add_directive("pyramid_openapi3_add_explorer", add_explorer_view)
     config.add_directive("pyramid_openapi3_spec", add_spec_view)
+    config.add_directive("pyramid_openapi3_JSONify_errors", JSONify_errors)
     config.add_tween("pyramid_openapi3.tween.response_tween_factory", over=EXCVIEW)
 
 
@@ -49,9 +53,9 @@ def openapi_view(view: View, info: ViewDeriverInfo) -> t.Optional[View]:
             # Validate request and attach all findings for view to introspect
             request.environ["pyramid_openapi3.validate_response"] = True
             settings = request.registry.settings["pyramid_openapi3"]
-            open_request = PyramidOpenAPIRequest(request)
+            openapi_request = PyramidOpenAPIRequest.create(request)
             request.openapi_validated = settings["request_validator"].validate(
-                open_request
+                openapi_request
             )
             if request.openapi_validated.errors:
                 raise RequestValidationError(errors=request.openapi_validated.errors)
@@ -105,7 +109,7 @@ def add_explorer_view(
     config.action(("pyramid_openapi3_add_explorer",), register, order=PHASE0_CONFIG)
 
 
-def add_formatter(config: Configurator, name: str, func: t.Callable):
+def add_formatter(config: Configurator, name: str, func: t.Callable) -> None:
     """Add support for configuring formatters."""
     config.registry.settings.setdefault("pyramid_openapi3_formatters", {})
     reg = config.registry.settings["pyramid_openapi3_formatters"]
@@ -148,3 +152,49 @@ def add_spec_view(
         }
 
     config.action(("pyramid_openapi3_spec",), register, order=PHASE0_CONFIG)
+
+
+def add_formatter(config: Configurator, name: str, func: t.Callable) -> None:
+    """Add support for configuring formatters."""
+    config.registry.settings.setdefault("pyramid_openapi3_formatters", {})
+    reg = config.registry.settings["pyramid_openapi3_formatters"]
+    reg[name] = func
+
+
+def openapi_validation_error(
+    context: t.Union[RequestValidationError, ResponseValidationError], request: Request
+) -> exception_response:
+    """Render any validation errors as JSON."""
+    extract_error = request.registry.settings["pyramid_openapi3_extract_error"]
+    errors = [extract_error(err) for err in context.errors]
+
+    # If validation failed for request, it is user's fault (-> 400), but if
+    # validation failed for response, it is our fault (-> 500)
+    if isinstance(context, RequestValidationError):
+        status_code = 400
+    else:
+        status_code = 500
+
+    return exception_response(status_code, json_body=errors)
+
+
+def JSONify_errors(
+    config: Configurator, extract_error: t.Optional[t.Callable] = None
+) -> None:
+    """JSONify OpenAPI Validation errors.
+
+    Without this, Pyramid renders text/plain version of errors.
+    """
+    config.registry.settings["pyramid_openapi3_extract_error"] = (
+        extract_error or default_extract_error
+    )
+
+    config.add_exception_view(view=openapi_validation_error, context=Exception)
+
+    # config.add_exception_view(
+    #     view=openapi_validation_error, context=RequestValidationError, renderer="json"
+    # )
+
+    # config.add_exception_view(
+    #     view=openapi_validation_error, context=ResponseValidationError, renderer="json"
+    # )

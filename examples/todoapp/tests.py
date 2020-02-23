@@ -1,5 +1,6 @@
 """A couple of functional tests to showcase pyramid_openapi3 features."""
 
+from unittest import mock
 from webtest import TestApp
 
 import app
@@ -13,21 +14,25 @@ class TestHappyPath(unittest.TestCase):
         """Start up the app so that tests can send requests to it."""
         self.testapp = TestApp(app.app())
 
-    def test_list_todos(self):
-        """Root returns a list of TODOs."""
-        res = self.testapp.get("/", status=200)
-        self.assertEqual(
-            res.json,
-            [{"title": "Buy milk"}, {"title": "Buy eggs"}, {"title": "Make pankaces!"}],
-        )
+        def test_list_todos(self):
+            """Root returns a list of TODOs."""
+            res = self.testapp.get("/", status=200)
+            self.assertEqual(
+                res.json,
+                [
+                    {"title": "Buy milk"},
+                    {"title": "Buy eggs"},
+                    {"title": "Make pankaces!"},
+                ],
+            )
 
-    def test_add_todo(self):
-        """POSTing to root saves a TODO."""  # noqa: D403
-        res = self.testapp.post_json("/", {"title": "Add marmalade"}, status=200)
-        self.assertEqual(res.json, "Item added.")
+        def test_add_todo(self):
+            """POSTing to root saves a TODO."""  # noqa: D403
+            res = self.testapp.post_json("/", {"title": "Add marmalade"}, status=200)
+            self.assertEqual(res.json, "Item added.")
 
-        # clean up after the test by removing the "Add marmalade" item
-        app.ITEMS.pop()
+            # clean up after the test by removing the "Add marmalade" item
+            app.ITEMS.pop()
 
 
 class TestBadRequests(TestHappyPath):
@@ -40,9 +45,9 @@ class TestBadRequests(TestHappyPath):
             res.json,
             [
                 {
-                    "exception": "MissingSchemaProperty",
+                    "exception": "ValidationError",
                     "field": "title",
-                    "message": "Missing schema property: title",
+                    "message": "'title' is a required property",
                 }
             ],
         )
@@ -54,10 +59,33 @@ class TestBadRequests(TestHappyPath):
             res.json,
             [
                 {
-                    "exception": "InvalidSchemaProperty",
-                    "field": "title",
-                    "message": "Invalid schema property title: "
-                    "Value is longer (41) than the maximum length of 40",
+                    "exception": "ValidationError",
+                    "field": "properties/title/maxLength",
+                    "message": "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' is too long",
+                }
+            ],
+        )
+
+
+class TestBadResponses(TestHappyPath):
+    """A suite of tests that showcase out-of-the-box handling of bad responses."""
+
+    def test_bad_items(self):
+        """Test bad output from view.
+
+        If our view returns JSON that does not match openapi.yaml schema,
+        then we should render a 500 error.
+        """
+        with mock.patch("app.ITEMS", ["foo", "bar"]):
+            res = self.testapp.get("/", status=500)
+
+        self.assertEqual(
+            res.json,
+            [
+                {
+                    "exception": "ValidationError",
+                    "field": "items/type",
+                    "message": "'foo' is not of type object",
                 }
             ],
         )

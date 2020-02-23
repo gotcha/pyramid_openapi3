@@ -67,7 +67,9 @@ setup(
     keywords="pyramid openapi3 openapi rest restful",
     packages=find_packages(exclude=["tests"]),
     package_data={"pyramid_openapi3": ["static/*.*"], "": ["LICENSE"]},
-    install_requires=["openapi-core", "openapi-spec-validator", "pyramid"],
+    # TODO: remove werkzeug as dependency after openapi-core 0.13.2
+    # https://github.com/p1c2u/openapi-core/issues/201
+    install_requires=["openapi-core", "openapi-spec-validator", "pyramid", "werkzeug"],
     extras_require={':python_version<"3.7"': ["importlib-resources"]},
     cmdclass={"verify": VerifyVersionCommand},
 )

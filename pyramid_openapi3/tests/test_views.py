@@ -104,13 +104,11 @@ def test_explorer_view_missing_spec() -> None:
         view = config.registry.adapters.registered(
             (IViewClassifier, request, Interface), IView, name=""
         )
-        with pytest.raises(ConfigurationError) as exc:
+        with pytest.raises(
+            ConfigurationError,
+            match="You need to call config.pyramid_openapi3_spec for explorer to work.",
+        ):
             view(request=DummyRequest(config=config), context=None)
-
-        assert (
-            str(exc.value)
-            == "You need to call config.pyramid_openapi3_spec for explorer to work."
-        )
 
 
 @dataclass
@@ -140,7 +138,7 @@ def test_openapi_view() -> None:
         view = config.registry.adapters.registered(
             (IViewClassifier, request_interface, Interface), IView, name=""
         )
-        request = DummyRequest(config=config)
+        request = DummyRequest(config=config, content_type="text/html")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         response = view(context, request)
@@ -176,7 +174,7 @@ def test_openapi_view_validate_HTTPExceptions() -> None:
         view = config.registry.adapters.registered(
             (IViewClassifier, request_interface, Interface), IView, name=""
         )
-        request = DummyRequest(config=config)
+        request = DummyRequest(config=config, content_type="text/html")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
 
@@ -222,16 +220,18 @@ def test_path_parameters() -> None:
             (IViewClassifier, request_interface, Interface), IView, name=""
         )
         # Test validation fails
-        request = DummyRequest(config=config)
+        request = DummyRequest(config=config, content_type="application/json")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         with pytest.raises(RequestValidationError) as exc:
             response = view(context, request)
 
-        assert str(exc.value) == "Missing required parameter: foo"
+        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
-        request = DummyRequest(config=config, params={"foo": "1"})
+        request = DummyRequest(
+            config=config, params={"foo": "1"}, content_type="application/json"
+        )
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         response = view(context, request)
@@ -277,17 +277,19 @@ def test_header_parameters() -> None:
             (IViewClassifier, request_interface, Interface), IView, name=""
         )
         # Test validation fails
-        request = DummyRequest(config=config)
+        request = DummyRequest(config=config, content_type="text/html")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
 
         with pytest.raises(RequestValidationError) as exc:
             response = view(context, request)
 
-        assert str(exc.value) == "Missing required parameter: foo"
+        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
-        request = DummyRequest(config=config, headers={"foo": "1"})
+        request = DummyRequest(
+            config=config, headers={"foo": "1"}, content_type="text/html"
+        )
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         response = view(context, request)
@@ -333,16 +335,18 @@ def test_cookie_parameters() -> None:
             (IViewClassifier, request_interface, Interface), IView, name=""
         )
         # Test validation fails
-        request = DummyRequest(config=config)
+        request = DummyRequest(config=config, content_type="text/html")
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         with pytest.raises(RequestValidationError) as exc:
             response = view(context, request)
 
-        assert str(exc.value) == "Missing required parameter: foo"
+        assert str(exc.value.errors[0]) == "Missing required parameter: foo"
 
         # Test validation succeeds
-        request = DummyRequest(config=config, cookies={"foo": "1"})
+        request = DummyRequest(
+            config=config, cookies={"foo": "1"}, content_type="text/html"
+        )
         request.matched_route = DummyRoute(name="foo", pattern="/foo")
         context = None
         response = view(context, request)

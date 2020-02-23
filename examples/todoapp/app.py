@@ -1,19 +1,21 @@
 """A Todo-app implementation using pyramid_openapi3."""
 
 from dataclasses import dataclass
-from openapi_core.schema.exceptions import OpenAPIError
-from openapi_core.schema.exceptions import OpenAPIMappingError
 from pyramid.config import Configurator
-from pyramid.httpexceptions import exception_response
 from pyramid.httpexceptions import HTTPException
 from pyramid.request import Request
 from pyramid.view import exception_view_config
 from pyramid.view import view_config
+from pyramid_openapi3.exceptions import extract_error
 from pyramid_openapi3.exceptions import RequestValidationError
+from pyramid_openapi3.exceptions import ResponseValidationError
 from wsgiref.simple_server import make_server
 
+import logging
 import os
 import typing as t
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,31 +53,6 @@ def post(request: Request) -> t.List[t.Dict["str", "str"]]:
     return "Item added."
 
 
-@exception_view_config(RequestValidationError, renderer="json")
-def openapi_validation_error(
-    context: HTTPException, request: Request
-) -> exception_response:
-    """If there are errors when handling the request, return them as response."""
-    errors = [extract_error(err) for err in context.errors]
-    return exception_response(400, json_body=errors)
-
-
-def extract_error(err: OpenAPIError, field_name: str = None) -> t.Dict[str, str]:
-    """Extract error JSON response using an Exception instance."""
-    output = {"message": str(err), "exception": err.__class__.__name__}
-
-    if getattr(err, "name", None) is not None:
-        field_name = err.name
-    if getattr(err, "property_name", None) is not None:
-        field_name = err.property_name
-    if field_name is None:
-        if isinstance(getattr(err, "original_exception", None), OpenAPIMappingError):
-            return extract_error(err.original_exception, field_name)
-    if field_name is not None:
-        output.update({"field": field_name})
-    return output
-
-
 def app():
     """Prepare a Pyramid app."""
     with Configurator() as config:
@@ -84,6 +61,7 @@ def app():
             os.path.join(os.path.dirname(__file__), "openapi.yaml")
         )
         config.pyramid_openapi3_add_explorer()
+        config.pyramid_openapi3_JSONify_errors()
         config.add_route("todo", "/")
         config.scan(".")
 

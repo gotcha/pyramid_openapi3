@@ -1,17 +1,16 @@
 """Test rendering errors as JSON responses."""
 
 from pyramid.config import Configurator
-from pyramid.httpexceptions import HTTPForbidden
-from pyramid.view import view_config
-from wsgiref.simple_server import make_server
-from pyramid.testing import testConfig
 from pyramid.httpexceptions import exception_response
+from pyramid.router import Router
+from webtest.app import TestApp
 
 import tempfile
+import typing as t
 import unittest
 
 
-def app(spec, view):
+def app(spec: str, view: t.Callable) -> Router:
     """Prepare a Pyramid app."""
     with Configurator() as config:
         config.include("pyramid_openapi3")
@@ -25,6 +24,9 @@ def app(spec, view):
 class BadRequestsTests(unittest.TestCase):
     """A suite of tests that make sure bad requests are handled."""
 
+    def foo(*args) -> None:  # noqa: D102
+        return None  # pragma: no cover
+
     OPENAPI_YAML = """
         openapi: "3.0.0"
         info:
@@ -32,9 +34,8 @@ class BadRequestsTests(unittest.TestCase):
           title: Foo
         paths:
           /foo:
-            get:
-              parameters:
-                {parameters}
+            post:
+              {parameters}
               responses:
                 200:
                   description: Say hello
@@ -42,7 +43,7 @@ class BadRequestsTests(unittest.TestCase):
                   description: Bad Request
     """
 
-    def _testapp(self, view, parameters):
+    def _testapp(self, view: t.Callable, parameters: str) -> TestApp:
         """Start up the app so that tests can send requests to it."""
         from webtest import TestApp
 
@@ -52,10 +53,11 @@ class BadRequestsTests(unittest.TestCase):
 
             return TestApp(app(document.name, view))
 
-    def test_missing_path_parameter(self):
+    def test_missing_path_parameter(self) -> None:
         """Render nice ValidationError if path parameter is missing."""
 
         parameters = """
+              parameters:
                 - name: bar
                   in: query
                   required: true
@@ -63,11 +65,9 @@ class BadRequestsTests(unittest.TestCase):
                     type: integer
         """
 
-        def foo(*args):
-            """Say foobar."""
-            return {"foo": "bar"}
-
-        res = self._testapp(view=foo, parameters=parameters).get("/foo", status=400)
+        res = self._testapp(view=self.foo, parameters=parameters).post(
+            "/foo", status=400
+        )
         assert res.json == [
             {
                 "exception": "MissingRequiredParameter",
@@ -76,10 +76,11 @@ class BadRequestsTests(unittest.TestCase):
             }
         ]
 
-    def test_missing_header_parameter(self):
+    def test_missing_header_parameter(self) -> None:
         """Render nice ValidationError if header parameter is missing."""
 
         parameters = """
+              parameters:
                 - name: bar
                   in: header
                   required: true
@@ -87,11 +88,9 @@ class BadRequestsTests(unittest.TestCase):
                     type: integer
         """
 
-        def foo(*args):
-            """Say foobar."""
-            return {"foo": "bar"}
-
-        res = self._testapp(view=foo, parameters=parameters).get("/foo", status=400)
+        res = self._testapp(view=self.foo, parameters=parameters).post(
+            "/foo", status=400
+        )
         assert res.json == [
             {
                 "exception": "MissingRequiredParameter",
@@ -100,10 +99,11 @@ class BadRequestsTests(unittest.TestCase):
             }
         ]
 
-    def test_missing_cookie_parameter(self):
+    def test_missing_cookie_parameter(self) -> None:
         """Render nice ValidationError if cookie parameter is missing."""
 
         parameters = """
+              parameters:
                 - name: bar
                   in: cookie
                   required: true
@@ -111,16 +111,99 @@ class BadRequestsTests(unittest.TestCase):
                     type: integer
         """
 
-        def foo(*args):
-            """Say foobar."""
-            return {"foo": "bar"}
-
-        res = self._testapp(view=foo, parameters=parameters).get("/foo", status=400)
+        res = self._testapp(view=self.foo, parameters=parameters).post(
+            "/foo", status=400
+        )
         assert res.json == [
             {
                 "exception": "MissingRequiredParameter",
                 "message": "Missing required parameter: bar",
                 "field": "bar",
+            }
+        ]
+
+    def test_missing_POST_parameter(self) -> None:
+        """Render nice ValidationError if POST parameter is missing."""
+
+        parameters = """
+              requestBody:
+                required: true
+                description: Data for saying foo
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      required:
+                        - foo
+                      properties:
+                        foo:
+                          type: string
+        """
+
+        res = self._testapp(view=self.foo, parameters=parameters).post_json(
+            "/foo", {}, status=400
+        )
+        assert res.json == [
+            {
+                "exception": "ValidationError",
+                "message": "'foo' is a required property",
+                "field": "foo",
+            }
+        ]
+
+    def test_missing_type_POST_parameter(self) -> None:
+        """Render nice ValidationError if POST parameter is of invalid type."""
+
+        parameters = """
+              requestBody:
+                required: true
+                description: Data for saying foo
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      required:
+                        - foo
+                      properties:
+                        foo:
+                          type: string
+        """
+
+        res = self._testapp(view=self.foo, parameters=parameters).post_json(
+            "/foo", {"foo": 1}, status=400
+        )
+        assert res.json == [
+            {
+                "exception": "ValidationError",
+                "message": "1 is not of type string",
+                "field": "properties/foo/type",
+            }
+        ]
+
+    def test_invalid_length_POST_parameter(self) -> None:
+        """Render nice ValidationError if POST parameter is of invalid length."""
+        parameters = """
+              requestBody:
+                required: true
+                description: Data for saying foo
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        foo:
+                          type: string
+                          minLength: 3
+        """
+
+        res = self._testapp(view=self.foo, parameters=parameters).post_json(
+            "/foo", {"foo": "12"}, status=400
+        )
+        assert res.json == [
+            {
+                "exception": "ValidationError",
+                "message": "'12' is too short",
+                "field": "properties/foo/minLength",
             }
         ]
 
@@ -147,7 +230,7 @@ class BadResponsesTests(unittest.TestCase):
                         type: string
     """
 
-    def _testapp(self, view):
+    def _testapp(self, view: t.Callable) -> TestApp:
         """Start up the app so that tests can send requests to it."""
         from webtest import TestApp
 
@@ -157,7 +240,7 @@ class BadResponsesTests(unittest.TestCase):
 
             return TestApp(app(document.name, view))
 
-    def test_foo(self):
+    def test_foo(self) -> None:
         """Say foo."""
 
         def foo(*args):
@@ -167,9 +250,8 @@ class BadResponsesTests(unittest.TestCase):
         res = self._testapp(view=foo).get("/foo", status=200)
         self.assertIn('{"foo": "bar"}', res.text)
 
-    def test_invalid_response_code(self):
+    def test_invalid_response_code(self) -> None:
         """Prevent responding with undefined response code."""
-        from pyramid.httpexceptions import HTTPConflict
 
         def foo(*args):
             raise exception_response(409, json_body={})
@@ -182,7 +264,7 @@ class BadResponsesTests(unittest.TestCase):
             }
         ]
 
-    def test_invalid_response_schema(self):
+    def test_invalid_response_schema(self) -> None:
         """Prevent responding with unmatching response schema."""
         from pyramid.httpexceptions import exception_response
 

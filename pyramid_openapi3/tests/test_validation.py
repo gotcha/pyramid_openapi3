@@ -10,14 +10,14 @@ from pyramid.router import Router
 from pyramid.testing import DummyRequest
 from pyramid.testing import setUp
 from pyramid.testing import tearDown
+from pyramid_openapi3.exceptions import ResponseValidationError
 from unittest import TestCase
 from zope.interface import Interface
-from pyramid_openapi3.exceptions import ResponseValidationError
 
 import json
+import pytest
 import tempfile
 import typing as t
-import pytest
 
 View = t.Callable[[t.Any, Request], Response]
 

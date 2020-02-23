@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from openapi_core.shortcuts import RequestValidator
 from openapi_core.shortcuts import ResponseValidator
 from pyramid.exceptions import ConfigurationError
-from pyramid.httpexceptions import exception_response
-from pyramid.httpexceptions import HTTPForbidden
 from pyramid.interfaces import IRouteRequest
 from pyramid.interfaces import IRoutesMapper
 from pyramid.interfaces import IView

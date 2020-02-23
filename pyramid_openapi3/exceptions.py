@@ -73,7 +73,7 @@ def extract_error(err: OpenAPIError) -> t.Dict[str, str]:
     ```
     """
     if getattr(err, "schema_errors", None) is not None:
-        for schema_error in err.schema_errors:
+        for schema_error in err.schema_errors:  # pragma: no branch
             return extract_error(schema_error)
 
     output = {"exception": err.__class__.__name__}

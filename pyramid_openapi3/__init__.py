@@ -1,10 +1,9 @@
 """Configure pyramid_openapi3 addon."""
 
+from .exceptions import extract_error as default_extract_error
 from .exceptions import RequestValidationError
 from .exceptions import ResponseValidationError
-from .exceptions import extract_error as default_extract_error
 from .wrappers import PyramidOpenAPIRequest
-from pyramid.httpexceptions import exception_response
 from openapi_core import create_spec
 from openapi_core.validation.request.validators import RequestValidator
 from openapi_core.validation.response.validators import ResponseValidator
@@ -14,6 +13,7 @@ from pyramid.config import Configurator
 from pyramid.config import PHASE0_CONFIG
 from pyramid.config.views import ViewDeriverInfo
 from pyramid.exceptions import ConfigurationError
+from pyramid.httpexceptions import exception_response
 from pyramid.path import AssetResolver
 from pyramid.request import Request
 from pyramid.response import FileResponse
@@ -174,7 +174,7 @@ def openapi_validation_error(
 def JSONify_errors(
     config: Configurator, extract_error: t.Optional[t.Callable] = None
 ) -> None:
-    """JSONify OpenAPI Validation errors.
+    """Render OpenAPI Validation errors as JSON.
 
     Without this, Pyramid renders text/plain version of errors.
     """

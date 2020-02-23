@@ -2,13 +2,8 @@
 
 from dataclasses import dataclass
 from pyramid.config import Configurator
-from pyramid.httpexceptions import HTTPException
 from pyramid.request import Request
-from pyramid.view import exception_view_config
 from pyramid.view import view_config
-from pyramid_openapi3.exceptions import extract_error
-from pyramid_openapi3.exceptions import RequestValidationError
-from pyramid_openapi3.exceptions import ResponseValidationError
 from wsgiref.simple_server import make_server
 
 import logging
